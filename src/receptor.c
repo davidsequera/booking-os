@@ -1,13 +1,14 @@
 //David Sequera
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/uio.h>
 #include <string.h>
-
+#include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
-
 #include "conexion.h" 
 
 //main functions
@@ -16,6 +17,7 @@ int readQueries(int ap, query []);
 int readBook(char *str, book *);
 //subfunctions
 int fileEdit(char* path,int start,int end, char* token);
+int readCopy(char *str, copy *c);
 
 
 int main (int argc, char **argv)
@@ -72,7 +74,7 @@ int queriesManager(int qc,query *qv){
   int founded = 0;
   book b;
   copy c;
-  int size = 100;
+  size_t size = 100;
   char* sample;
   FILE *fi, *fo;
   fi = fopen("dbin", "r");//recuerda cambiar el argv
@@ -100,6 +102,7 @@ int queriesManager(int qc,query *qv){
     qd++;
   }
   fclose(fi);
+  return 0 ;
 }
 
 int readQueries(int tp, query *qv){
