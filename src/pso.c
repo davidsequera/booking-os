@@ -63,6 +63,7 @@ int main (int argc, char **argv)
     }else{
       exit(1);
     }
+    unlink("PipePrueba");
     exit(0);
 }
 
@@ -78,3 +79,36 @@ query createQuery(char type,  char book[MAXNAME],  int ISBN,int status, char* pi
 }
 
 
+
+int genPipeName(char *a){
+    //rangos ASCII 0-1 (48-57)10 a-z(97-122)26 A-Z(65-90)26
+    const int w = 11, z = 20;
+    int n;
+    char s[w];//random first
+    char e[z];//finale random
+    char* t = itoa(time(NULL));//time
+    for (size_t i = 0; i < w; i++)
+    {
+        int a = rand() % 3;
+        if(a==0){
+            n = rand() % 10 + 48;
+        }else if(a==1){
+            n = rand() % 26 + 97;
+        }else{
+            n = rand() % 26 + 65;
+        }
+        *(s+i)= i==(w-1)? (char)0 : (char)n;
+    }
+    for (size_t i = 0; i < z; i++)
+    {
+        if(i%2 == 0){
+            *(e+i)= *(s+(i/2)) ;
+        }else{
+            *(e+i)= i==(z-1)? (char)0 :t[((i-1)/2)] ;
+        }
+    }
+    strcat(a,s);
+    strcat(a,z);
+    strcat(a,t);
+    return 0;
+}

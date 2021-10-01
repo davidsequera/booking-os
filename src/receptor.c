@@ -13,9 +13,11 @@
 //main functions
 int queriesManager(int qc,query []);
 int readQueries(int ap, query []);
-int readBook(char *str, book *);
+
 //subfunctions
 int fileEdit(char* path,int start,int end, char* token);
+int readBook(char *str, book *);
+int resolveDB(query *q, copy *c);
 
 
 int main (int argc, char **argv)
@@ -62,8 +64,8 @@ int main (int argc, char **argv)
       printf ("Open Apipe\n");
       write (ap, &queries[i], sizeof(query));
     }
-    
-
+    unlink("ThePipe");
+    exit(0);
 }
 
 
@@ -167,3 +169,21 @@ int fileEdit(char* path,int start,int end, char* token){
 }
 
 
+int resolveDB(query *q, copy *c){
+  if(q->type == 'S' && c->state == 'D'){
+    c->state = 'P';
+    // c->date
+    q->status = 201;
+  }else
+  if(q->type == 'R' && c->state == 'P'){
+    q->status = 202;
+  }else
+  if(q->type == 'D' && c->state == 'P'){
+    c->state = 'D';
+    q->status = 202;
+  }else{
+    q->status = 404;
+    return -1;
+  }
+  return 0;
+}
