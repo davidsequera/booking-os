@@ -22,24 +22,28 @@ int main (int argc, char **argv)
   int tp,ap, pid, n, bytes,nqueries;
   srand(time(NULL));
   mode_t fifo_mode = S_IRUSR | S_IWUSR;
-    // if(argc != 3){//./e pipe db
-    //     printf ("Bad request: Check Documentation\n");
-    //     exit(1);
-    // }
+     if(argc != 3){//./e queries pipe 
+         printf ("Bad request: Check Documentation\n");
+         exit(1);
+     }
+  char *queriesFile = malloc(strlen(argv[1])+1); 
+  strcpy(queriesFile,argv[1]);
+   char *thePipe = malloc(strlen(argv[2])+1); 
+  strcpy(thePipe,argv[2]);
 
 //READ AND CREATE QUERY
 
     char *PipeName = genPipeName();
     //printf("Type: %c\tName: %s\tISBN: %d\tStatus: %d\tPipeName: %s\n",  q.type,q.book,q.ISBN,q.status,q.pipe);
     query queries[MAXQUERIES], response;
-    nqueries= readQueries("queries.txt", queries, PipeName);
+    nqueries= readQueries(queriesFile, queries, PipeName);
 
 
 //SENT QUERY
 
-    tp = open("ThePipe", O_WRONLY);
+    tp = open(thePipe, O_WRONLY);
      if (tp == -1) {
-        perror("ThePipe");
+        perror(thePipe);
         printf(" Se volvera a intentar despues\n");
 	      sleep(5);        
       }
@@ -70,6 +74,8 @@ int main (int argc, char **argv)
     }
     unlink(PipeName);
     free(PipeName);
+    free(thePipe);
+    free(queriesFile);
     exit(0);
 }
 
@@ -141,7 +147,7 @@ int readQueries(char* path, query *qv, char* PipeName){
             printf("Type: %c\tLIRBO: %s\tISBN: %d\t PIPEID:%s\n",qv[qc].type,qv[qc].book,qv[qc].ISBN,qv[qc].pipe);
             qc++;      
     }
-    //
+    // Petición adicional para terminar 
     qv[qc].type = 'S';
     strcpy(qv[qc].book ,PipeName);
     qv[qc].ISBN = 0;

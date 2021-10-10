@@ -20,10 +20,10 @@ int fileEdit(char* path,int start,int end, char* token);
 int readBook(char *str, book *);
 int readCopy(char *str, copy *c);
 int queryLogic(query *q, copy *c);
-void setDate(copy *c,int w);
+void setDate(copy *c,int w); 
 
 //Global varibles
-int paramc; char **paramv;
+int paramc; char *thePipe; char * dbin;
 
 int main (int argc, char** argv)
 {
@@ -31,22 +31,28 @@ int main (int argc, char** argv)
   if(argc != 3){// ./e pipe db
     printf ("Bad request: Check out Documentation\n");
     exit(1);
-  }
+  } 
 
   int tp,ap, pid,bytes; //THEPIPE = tp A PIPE = ap
   query queries[MAXQUERIES];//BUFFER
+  thePipe = malloc(strlen(argv[1])+1); 
+  strcpy(thePipe,argv[1]);
+   dbin = malloc(strlen(argv[2])+1); 
+  strcpy(dbin,argv[2]);
+
+
 
 
 //OPEN PIPE
   mode_t fifo_mode = S_IRUSR | S_IWUSR;
   
-  unlink("ThePipe");
-  if (mkfifo ("ThePipe", fifo_mode) == -1) {
+  unlink(thePipe);
+  if (mkfifo (thePipe, fifo_mode) == -1) {
      perror("[mkfifo]");
      exit(1);
   }
   
-  tp = open ("ThePipe", O_RDONLY);
+  tp = open (thePipe, O_RDONLY);
   printf ("Pipe Opening\n");
 
 //READ AND RESPOND QUERIES
@@ -55,7 +61,7 @@ int main (int argc, char** argv)
 
   do
   {
-    readQuery(tp,&queries[qc]);
+    readQuery(tp,&queries[qc]); 
     status = queries[qc].status;
     queryDB(&queries[qc]);
     ap = open(queries[qc].pipe, O_WRONLY);
@@ -71,7 +77,9 @@ int main (int argc, char** argv)
   
 
 //CLOSE PIPE AND EXIT
-    unlink("ThePipe");
+    unlink(thePipe);
+    free(thePipe);
+    free(dbin);
     exit(0);
 }
 
@@ -85,7 +93,7 @@ int queryDB(query *q){
   char* sample, *outCopy;
   FILE *fi;
 
-  fi = fopen("dbin", "r");//recuerda cambiar el argv
+  fi = fopen(dbin, "r");//recuerda cambiar el argv
   sample = (char *) malloc (size);
   outCopy = (char *) malloc (size);
   while (!feof(fi) && !founded)  {
@@ -115,7 +123,7 @@ int queryDB(query *q){
   if(founded){
     sprintf(outCopy, "%d,%c,%d-%d-%d\n",c.index,c.state,(c.date.day),(c.date.month),(c.date.year));
     printf("%d\t%d\t%s\n",start,end,outCopy);
-    dbWrite = fileEdit("dbin",start,end,outCopy);
+    dbWrite = fileEdit(dbin,start,end,outCopy);
     if(!dbWrite){
       q->status = 500;//Internal Server Error
     }
@@ -149,27 +157,18 @@ int readQuery(int tp, query *qv){
     return 0;
 }
 
-int respondQuery(int ap, query *q){
-    ap = open(q->pipe, O_WRONLY);
-      if (ap == -1) {
-        perror("A Pipe");
-        printf(" Se volvera a intentar despues\n");
-	      sleep(5);        
-      }
-    printf ("Open Apipe\n");
-    write (ap, q, sizeof(query));
-}
+
 
 //logic of the project and sets copy
 int queryLogic(query *q, copy *c){
-  if(q->type == 'P' && c->state == 'D'){
+  if(q->type == 'P' && c->state == 'D'){  // P = Prestamo 
     c->state = 'P';
     setDate(c,0);
     // c->date
     q->status = 201;//Created
   }else
-  if(q->type == 'R' && c->state == 'P'){
-    q->status = 202;//Renewed
+  if(q->type == 'R' && c->state == 'P'){ 
+    q->status = 202;//Renewed 
     setDate(c,1);
 
   }else
@@ -209,7 +208,7 @@ int fileEdit(char* path,int start,int end, char* token){
     fread(b, fend-end, 1, f);
     fclose(f);
 
-//WRITE
+           
     if((f = fopen(path, "wb")) == NULL){
         printf("[fileEdit] Error opening file\n");
         return -1;
@@ -227,5 +226,5 @@ void setDate(copy *c,int w){
     struct tm tm = *localtime(&now);
     c->date.year = tm.tm_year + 1900;
     c->date.month = tm.tm_mon + 1;
-    c->date.day =  tm.tm_mday;
+    c->date.day =  tm.tm_mday;       
 }
