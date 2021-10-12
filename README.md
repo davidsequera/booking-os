@@ -2,22 +2,28 @@
 
 A booking app for borrow books with the use of process, threads, pipes and other tools of OS
 
-## Comenzando 🚀
+## Description 🚀
 
-_Estas instrucciones te permitirán obtener una copia del proyecto en funcionamiento en tu máquina local para propósitos de desarrollo y pruebas._
+_the main purpose of the project is to develop a program that uses OS concepts like processes pipes and threads with the goal of developing the skills of managing those. The project consist of a booking app with 3 main features, Borrow, Extend, and Return a book _
 
 Mira **Deployment** para conocer como desplegar el proyecto.
 
 
-### Pre-requisitos 📋
+### Pre-requirements 📋
 
-_Que cosas necesitas para instalar el software y como instalarlas_
+_for this project you need gcc compiler and a unix/linux machine, virtal machine or wsl_
 
 ```
-Da un ejemplo
+C:\Users\name>cmd
+Microsoft Windows [Version 10.0.19043.1266]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\name>wsl -l -v
+  NAME      STATE           VERSION
+* Ubuntu    Running         1
 ```
 
-### Instalación 🔧
+### Instalation 🔧
 
 _Una serie de ejemplos paso a paso que te dice lo que debes ejecutar para tener un entorno de desarrollo ejecutandose_
 
@@ -35,7 +41,7 @@ hasta finalizar
 
 _Finaliza con un ejemplo de cómo obtener datos del sistema o como usarlos para una pequeña demo_
 
-## Ejecutando las pruebas ⚙️
+## Testing ⚙️
 
 _Explica como ejecutar las pruebas automatizadas para este sistema_
 
@@ -55,17 +61,16 @@ _Explica que verifican estas pruebas y por qué_
 Da un ejemplo
 ```
 
-## Despliegue 📦
+## Deployment 📦
 
-_Agrega notas adicionales sobre como hacer deploy_
+_you should use the makefile file for coplining the code and leave the exec files take into a acount that you will need when you execute the code_
 
-## Construido con 🛠️
+## Made by 🛠️
 
 _Menciona las herramientas que utilizaste para crear tu proyecto_
 
-* [Dropwizard](http://www.dropwizard.io/1.0.2/docs/) - El framework web usado
-* [Maven](https://maven.apache.org/) - Manejador de dependencias
-* [ROME](https://rometools.github.io/rome/) - Usado para generar RSS
+* [VS Code](https://code.visualstudio.com/) - El editor
+* [WSL](https://docs.microsoft.com/en-us/windows/wsl/) - Corriendo en distribuciones de Ubuntu
 
 ## Contribuyendo 🖇️
 
