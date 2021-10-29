@@ -4,6 +4,7 @@
 #define MAXPIPE 30
 #define MAXNAME 39
 #define MAXCOPIES 500
+#define MAXTHREADS 20
 
 typedef struct zeit {
   int day;

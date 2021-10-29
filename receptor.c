@@ -1,14 +1,19 @@
-//David Sequera
+//TEC 10
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
 #include <sys/uio.h>
-#include <string.h>
-#include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
 #include <fcntl.h>
 #include <signal.h>
+#include <pthread.h>
+
+#include <time.h>
+#include <string.h>
+
 #include "booking.h" 
 
 //main functions
@@ -21,24 +26,24 @@ int readBook(char *str, book *);
 int readCopy(char *str, copy *c);
 int queryLogic(query *q, copy *c);
 void setDate(copy *c,int w); 
-
+int params(int argc, char** argv);
 //Global varibles
-int paramc; char *thePipe; char * dbin;
+char *thePipe; char * dbin;
+
+
 
 int main (int argc, char** argv)
 {
 //CONTROL
-  if(argc != 3){// ./e pipe db
+  if(params(argc, argv) == -1){// ./e pipe db
     printf ("Bad request: Check out Documentation\n");
+    printf ("./receptor –p pipeReceptor –f filedatos\n");
     exit(1);
   } 
 
   int tp,ap, pid,bytes; //THEPIPE = tp A PIPE = ap
   query queries[MAXQUERIES];//BUFFER
-  thePipe = malloc(strlen(argv[1])+1); 
-  strcpy(thePipe,argv[1]);
-   dbin = malloc(strlen(argv[2])+1); 
-  strcpy(dbin,argv[2]);
+
 
 
 
@@ -70,6 +75,7 @@ int main (int argc, char** argv)
       printf(" Se volvera a intentar despues\n");
       sleep(5);        
     }
+    //Abrir pipe segun arreglo de pipes
     // printf ("Open pipe\n");
     write (ap, &queries[qc], sizeof(query));
     qc++;
@@ -174,7 +180,7 @@ int queryLogic(query *q, copy *c){
   }else
   if(q->type == 'D' && c->state == 'P'){
     c->state = 'D';
-    q->status = 202;//Returned
+    q->status = 200;//Returned
     setDate(c,0);
   }else{
     q->status = 401;//No Match means fail
@@ -227,4 +233,32 @@ void setDate(copy *c,int w){
     c->date.year = tm.tm_year + 1900;
     c->date.month = tm.tm_mon + 1;
     c->date.day =  tm.tm_mday;       
+}
+//Verifies and Saves argv in global varibles
+int params(int argc, char** argv){
+  int pipe, database;
+  if(argc != 5 ){
+    return -1;
+  }
+  for (size_t i = 1; i < 5; i+=2)
+  {
+    if(strlen(argv[i]) > 2 ){
+      return -1;
+    }
+    if(strcmp(argv[i], "-p") != 0 && strcmp(argv[i], "-f") != 0  ){
+      return -1;
+    }
+    if(strcmp(argv[i], "-p") == 0){
+      pipe = i;
+    }
+    if(strcmp(argv[i], "-f") == 0){
+      database = i;
+    }    
+  }
+  
+  thePipe = malloc(strlen(argv[pipe+1])+1); 
+  strcpy(thePipe,argv[pipe+1]);
+  dbin = malloc(strlen(argv[database+1])+1); 
+  strcpy(dbin,argv[database+1]);
+  return 0;
 }

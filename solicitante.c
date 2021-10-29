@@ -1,4 +1,4 @@
-//David Sequera
+//TEC 10
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -14,22 +14,26 @@
 query createQuery(char type,  char book[MAXNAME],  int ISBN,int status, char* pipename );
 int readQueries(char* path, query *qv, char* PipeName);
 char* genPipeName();
+int params(int argc, char** argv);
+//Global varibles
+char *thePipe; char * queriesFile;
+
 
 
 int main (int argc, char **argv)
 {
 //CONTROL
+     if(params(argc,argv) == -1){//./e queries pipe 
+         printf ("Bad request: Check Documentation\n");
+         printf ("Example: ./solicitante –i queriesFile –p pipeReceptor\n");
+         exit(1);
+     }
+
   int tp,ap, pid, n, bytes,nqueries;
   srand(time(NULL));
   mode_t fifo_mode = S_IRUSR | S_IWUSR;
-     if(argc != 3){//./e queries pipe 
-         printf ("Bad request: Check Documentation\n");
-         exit(1);
-     }
-  char *queriesFile = malloc(strlen(argv[1])+1); 
-  strcpy(queriesFile,argv[1]);
-   char *thePipe = malloc(strlen(argv[2])+1); 
-  strcpy(thePipe,argv[2]);
+
+
 
 //READ AND CREATE QUERY
 
@@ -45,8 +49,8 @@ int main (int argc, char **argv)
      if (tp == -1) {
         perror(thePipe);
         printf(" Se volvera a intentar despues\n");
-	      sleep(5);        
-      }
+	    sleep(5);        
+    }
     printf ("Open ThePipe\n");
     for (size_t i = 0; i < nqueries; i++)
         write (tp, &queries[i], sizeof(query));
@@ -157,4 +161,32 @@ int readQueries(char* path, query *qv, char* PipeName){
     //
     free(line);
     return qc;
+}
+
+int params(int argc, char** argv){
+  int pipe, queries;
+  if(argc != 5 ){
+    return -1;
+  }
+  for (size_t i = 1; i < 5; i+=2)
+  {
+    if(strlen(argv[i]) > 2 ){
+      return -1;
+    }
+    if(strcmp(argv[i], "-i") != 0 && strcmp(argv[i], "-p") != 0  ){
+      return -1;
+    }
+    if(strcmp(argv[i], "-i") == 0){
+      queries = i;
+    }
+    if(strcmp(argv[i], "-p") == 0){
+      pipe = i;
+    }    
+  }
+  
+  queriesFile = malloc(strlen(argv[queries+1])+1); 
+  strcpy(queriesFile,argv[queries+1]);
+  thePipe = malloc(strlen(argv[pipe+1])+1); 
+  strcpy(thePipe,argv[pipe+1]);
+  return 0;
 }
