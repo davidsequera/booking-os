@@ -12,12 +12,15 @@
 #include "booking.h" 
 
 query createQuery(char type,  char book[MAXNAME],  int ISBN,int status, char* pipename );
+//funcion de debbuging no usada
+
 int readQueries(char* path, query *qv, char* PipeName);
 char* genPipeName();
 int params(int argc, char** argv);
+
+
 //Global varibles
 char *thePipe; char * queriesFile;
-
 
 
 int main (int argc, char **argv)
@@ -25,7 +28,7 @@ int main (int argc, char **argv)
 //CONTROL
      if(params(argc,argv) == -1){//./e queries pipe 
          printf ("Bad request: Check Documentation\n");
-         printf ("Example: ./solicitante –i queriesFile –p pipeReceptor\n");
+         printf ("Example: ./solicitante -i queries.txt -p pipeReceptor\n");
          exit(1);
      }
 
@@ -44,7 +47,6 @@ int main (int argc, char **argv)
 
 
 //SENT QUERY
-
     tp = open(thePipe, O_WRONLY);
      if (tp == -1) {
         perror(thePipe);
@@ -52,8 +54,10 @@ int main (int argc, char **argv)
 	    sleep(5);        
     }
     printf ("Open ThePipe\n");
-    for (size_t i = 0; i < nqueries; i++)
+    for (size_t i = 0; i < nqueries; i++){
         write (tp, &queries[i], sizeof(query));
+        sleep(5);
+    }
 
 
 //WAIT RESPONSE
@@ -148,7 +152,7 @@ int readQueries(char* path, query *qv, char* PipeName){
             sscanf(&line[strlen(qv[qc].book)+2],",%d",&(qv[qc].ISBN));
             qv[qc].status = 100; // Continuar
             strcpy(qv[qc].pipe ,PipeName);
-            printf("Type: %c\tLIRBO: %s\tISBN: %d\t PIPEID:%s\n",qv[qc].type,qv[qc].book,qv[qc].ISBN,qv[qc].pipe);
+            // printf("Type: %c\tLibro: %s\tISBN: %d\t PIPEID:%s\n",qv[qc].type,qv[qc].book,qv[qc].ISBN,qv[qc].pipe);
             qc++;      
     }
     // Petición adicional para terminar 
