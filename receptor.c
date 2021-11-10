@@ -19,22 +19,32 @@
 
 #include "booking.h" 
 
+#define BUFFSIZE 1
+
 //main functions
-editArg queryDB(query *);
+int saveDB();
+edit queryEdit(query *q, int bs);
 int readQuery(int ap, query *q);
 
 //subfunctions
-void* fileEdit(void *arg);
+void* EditDB(void *arg);
 int readBook(char *str, book *);
 int readCopy(char *str, copy *c);
 int queryLogic(query *q, copy *c);
 void setDate(copy *c,int w); 
 int params(int argc, char** argv);
 int pipeInt(char *PipeName,Pipe *array );
+int pipeOut(char *PipeName,Pipe *array );
+void *put(edit *e);
+
 //Global varibles
-char *thePipe; char * dbin;
-sem_t sem;
+sem_t s, spaces, elements; // semaforos para la implementacion del buffer
 pthread_t hilo;
+
+char *thePipe; char * dbin;
+edit BUFFER[BUFFSIZE];
+book DB[MAXQUERIES];// Estrcutura de la base de datos
+int pcons=0, pprod=0, nbook = 0, nPipes = 0;
 
 int main (int argc, char** argv)
 {
@@ -44,13 +54,17 @@ int main (int argc, char** argv)
     printf ("./receptor -p pipeReceptor -f dbin\n");
     exit(1);
   } 
-  sem_init(&sem, 0, 1);
+  sem_init(&s, 0, 1);
+  sem_init(&spaces, 0, BUFFSIZE);
+  sem_init(&elements, 0, 0);
   int tp,ap, pid,bytes; //THEPIPE = tp A PIPE = ap
   query queries[MAXQUERIES];//BUFFER
   Pipe pipes[MAXPIPES];//Buffer
-    for(int i= 0; i<MAXPIPES; i++)
-      pipes[i].number = -1;
-//OPEN PIPE
+  for(int i= 0; i<MAXPIPES; i++)pipes[i].number = -1;
+  for(int i=0; i < BUFFSIZE; i++) BUFFER[i].bool = 0;
+  nbook = saveDB();
+
+//OPEN PIPE AND THREAD
   mode_t fifo_mode = S_IRUSR | S_IWUSR;
   unlink(thePipe);
   if (mkfifo (thePipe, fifo_mode) == -1) {
@@ -61,35 +75,46 @@ int main (int argc, char** argv)
   tp = open (thePipe, O_RDONLY);
   printf ("Pipe Opening\n");
 
+  if(pthread_create(&hilo, NULL, &EditDB, NULL))
+  {
+      printf("\n ERROR creating thread");
+  }
+
 //READ AND RESPOND QUERIES
   // query counter and general status
   int qc= 0, status;
-  
+  edit Edit;
   do
   {
     readQuery(tp,&queries[qc]); 
     status = queries[qc].status;
-    editArg fileArg = queryDB(&queries[qc]);
-    if(pthread_create(&hilo, NULL, &fileEdit, &fileArg))
-    {
-      printf("\n ERROR creating thread");
-    }
+    Edit = queryEdit(&queries[qc], nbook);
+    if(Edit.bool != -1) put(&Edit);
     ap = pipeInt(queries[qc].pipe, pipes);
     if (ap == -1) {
-      printf(" Error: Se volvera a intentar despues\n");
-      sleep(5);        
+      printf("Error: Se volvera a intentar despues\n");
+      sleep(5);
+    }
+    if(status == 600){
+      pipeOut(queries[qc].pipe, pipes);
     }
     // printf("PIPE INT: %d \n", ap);
     //Abrir pipe segun arreglo de pipes
     // printf ("Open pipe\n");
     write (ap, &queries[qc], sizeof(query));
-    if(pthread_join(hilo, NULL))	/* wait for the thread 1 to finish */
-    {
-      printf("ERROR joining thread\n");
+    if(nPipes > MAXPIPES){
+      printf("Number of pipes exceed\n");
+      break;
     }
     qc++;
-  } while (status != 600);//end everything
-  
+  } while (nPipes != 0);//end everything
+
+  Edit.bool = -2; put(&Edit);
+
+  if(pthread_join(hilo, NULL))	/* wait for the thread 1 to finish */
+  {
+      printf("ERROR joining thread\n");
+  }
 
 //CLOSE PIPE, LINKS THREATH , FREE MEMORY AND EXIT
     unlink(thePipe);
@@ -98,62 +123,73 @@ int main (int argc, char** argv)
     exit(0);
 }
 
-
-editArg queryDB(query *q){
-  int start = -1, end = -1;//query done!
-  int correctBook = 0,correctCopy = 0 , founded = 0;//booleans
-  book b;
-  copy c;
+//returns the number of books or -1 if error
+int saveDB(){
+  // printf("Hello\n");
   size_t size = 0;
-  char* sample, *outCopy;
-  editArg fileArg;
-    fileArg.edit = 0;
-  FILE *fi;
-
-  fi = fopen(dbin, "r");
+  int b = 0;
+  char* sample;
   sample = (char *) malloc (size);
-  outCopy = (char *) malloc (size);
-  sem_wait(&sem);
-  while (!feof(fi) && !founded)  {
+  FILE *fi;
+  if((fi = fopen(dbin, "r"))== NULL){
+    return -1;
+  }
+  while (!feof(fi) )  {
     getline(&sample,&size,fi);
-    readBook(sample,&b);
-    if(strcmp(b.name,(q)->book) == 0   && b.ISBN == (q)->ISBN){//comparar 2 strings
+    readBook(sample,&(DB[b]));
+    for (int j = 0; j < DB[b].copies && !feof(fi) ; j++)
+    {
+      getline(&sample,&size,fi);
+      readCopy(sample,&(DB[b].Copies[j]));
+      DB[b].Copies[j].end = ftell(fi);
+      DB[b].Copies[j].start = (DB[b].Copies[j].end)-strlen(sample);
+    }
+    b++;
+  }
+  fclose(fi);
+  free(sample);
+  return b;
+}
+
+//Search in DB if query could be made. Returs edit.bool = 1 if is found else -1
+edit queryEdit(query *q, int bs){
+  int correctBook = 0,correctCopy = 0 , founded = 0;//booleans
+  size_t size = 0;
+  char *token;
+  token = (char *) malloc (size);
+  copy c;
+  edit Edit; Edit.bool = -1;
+  sem_wait(&s);
+  for (int i = 0; i < bs && !founded ; i++) {
+    if(strcmp(DB[i].name,(q)->book) == 0   && DB[i].ISBN == (q)->ISBN){//comparar 2 strings
         correctBook = 1;
-        printf("%s\t%d\t%d\n", b.name,b.ISBN,b.copies);
+        printf("%s\t%d\t%d\n", DB[i].name,DB[i].ISBN,DB[i].copies);
     }else if (!correctBook){
       q->status = 404;
     }
-    for (size_t j = 0; j < b.copies && !feof(fi) && !founded ; j++)
+    for (size_t j = 0; j < DB[i].copies && !founded ; j++)
     {
-      getline(&sample,&size,fi);
-      readCopy(sample,&c);
+      memcpy(&c, &(DB[i].Copies[j]), sizeof(copy));
       if(correctBook){
         correctCopy = queryLogic(q,&c);
         if(correctCopy){
-          end = ftell(fi);
-          start = end-strlen(sample);
           founded = 1;
         }
       }
     }    
   }
-  fclose(fi);
-  sem_post(&sem);
   if(founded){
-    sprintf(outCopy, "%d,%c,%d-%d-%d\n",c.index,c.state,(c.date.day),(c.date.month),(c.date.year));
-    // printf("%d\t%d\t%s\n",start,end,outCopy);
-    sem_wait(&sem);
-    strcpy(fileArg.path,dbin);
-    fileArg.start = start;
-    fileArg.end = end;
-    strcpy(fileArg.token,outCopy);
-    // printf("[original]path: %s start: %d end: %d token: %s\n", dbin,start,end,fileArg.token);
-    fileArg.edit = 1;
-    sem_post(&sem);
+    sprintf(token, "%d,%c,%d-%d-%d\n",c.index,c.state,(c.date.day),(c.date.month),(c.date.year));
+    // printf("%d\t%d\t%s\n",start,end,token);
+    Edit.start = c.start;
+    Edit.end = c.end;
+    strcpy(Edit.token,token);
+    // printf("[original]path: %s start: %d end: %d token: %s\n", dbin,start,end,Edit.token);
+    Edit.bool = 1;
   }
-  free(sample);
-  free(outCopy);
-  return fileArg;
+  free(token);
+  sem_post(&s);
+  return Edit;
 }
 
 // converts a string into a book
@@ -166,6 +202,7 @@ int readBook(char *str, book *b){
 // converts a string into a copy
 int readCopy(char *str, copy *c){
   sscanf(str, "%d,%c,%d-%d-%d",&c->index,&c->state,&(c->date.day),&(c->date.month),&(c->date.year)); 
+  c->start = -1; c->end = -1;
   return 0; 
 }
 
@@ -232,58 +269,75 @@ int queryLogic(query *q, copy *c){
   return 1;
 }
 
+//Puts structure in buffer
+void *put(edit *e) {
+      sem_wait(&spaces);
+      sem_wait(&s);
+      if (BUFFER[pprod].bool == 0) memcpy(&BUFFER[pprod], e, sizeof(edit));
+      pprod = (pprod + 1) % BUFFSIZE;
+      sem_post(&s);
+      sem_post(&elements);
+} 
+
 // Edit a file and if correct returns 1 else 0
-void* fileEdit(void *arg){
-    sem_wait(&sem);
-
-    editArg fileArg = *(editArg *)arg;
-
-    if(!fileArg.edit){
-        // printf("[fileEdit] Error not editable\n");
-        sem_post(&sem);
-        return arg;
-    }
-
-    char* path= fileArg.path;
-    int start= fileArg.start;
-    int end= fileArg.end;
-    char* token = fileArg.token;
-    // printf("[other]path: %s start: %d end: %d token: %s\n", dbin,start,end,((editArg *)arg)->token);
-    int fend = 0;
-    FILE *f;//CONTROL
-
-    if((f = fopen(path, "rb")) == NULL){
-        printf("[fileEdit] Error opening file\n");
-        sem_post(&sem);
-        return arg;
-    }
-    fseek(f, 0L, SEEK_END);
-    fend = ftell(f);
-    fseek(f, 0L, SEEK_SET);
-
-    if( end > fend)
-        end = fend;
-    if(start > end || start < 0){
-        printf("[fileEdit] Incorrect params or/and overlaod\n");
-        sem_post(&sem);
-        return arg;
-    }
-    char a[start+1],b[fend-end+1];
-//COPY
-    fread(a, start, 1, f);
-    fseek(f, (long)end, SEEK_SET);
-    fread(b, fend-end, 1, f);
-    fclose(f);       
-    if((f = fopen(path, "wb")) == NULL){
-        printf("[fileEdit] Error opening file\n");
-        sem_post(&sem);
-        return arg;
-    }
-    fwrite(a, start, 1, f);
-    fwrite(token, strlen(token), 1, f);
-    fwrite(b, fend-end, 1, f);    
-    fclose(f);
-    sem_post(&sem);
+void* EditDB(void *arg){
+  while(1){
+      sem_wait(&elements);
+      sem_wait(&s);
+      edit Edit;
+      memcpy(&Edit, &BUFFER[pcons], sizeof(edit));
+      BUFFER[pcons].bool = 0; // para indicar que la posición está vacia
+      pcons= (pcons + 1) % BUFFSIZE;
+      if(Edit.bool == -2){
+          // printf("[EditDB] last element\n");
+          sem_post(&s);
+          sem_post(&spaces);
+          return NULL;
+      }
+      int start = Edit.start;
+      int end = Edit.end;
+      char* token = Edit.token;
+      int fend = 0;
+      // printf("[other]path: %s start: %d end: %d token: %s\n", dbin,start,end,token);
+      FILE *f;
+  //CONTROL
+      if((f = fopen(dbin, "rb")) == NULL){
+          printf("[EditDB] Error opening file\n");
+          sem_post(&s);
+          sem_post(&spaces);
+          return NULL;
+      }
+      fseek(f, 0L, SEEK_END);
+      fend = ftell(f);
+      fseek(f, 0L, SEEK_SET);
+      if( end > fend)
+          end = fend;
+      if(start > end || start < 0){
+          printf("[EditDB] Incorrect params or/and overlaod\n");
+          sem_post(&s);
+          sem_post(&spaces);
+          return NULL;
+      }
+      char a[start+1],b[fend-end+1];
+  //COPY
+      fread(a, start, 1, f);
+      fseek(f, (long)end, SEEK_SET);
+      fread(b, fend-end, 1, f);
+      fclose(f);       
+      if((f = fopen(dbin, "wb")) == NULL){
+          printf("[EditDB] Error opening file\n");
+          sem_post(&s);
+          sem_post(&spaces);
+          return NULL;
+      }
+      fwrite(a, start, 1, f);
+      fwrite(token, strlen(token), 1, f);
+      fwrite(b, fend-end, 1, f);  
+      fclose(f);
+      nbook = saveDB();
+      sem_post(&s);
+      sem_post(&spaces); 
+  }
 }
 
 //sets the actual date plus w as weeks ahead.
@@ -294,6 +348,7 @@ void setDate(copy *c,int w){
     c->date.month = tm.tm_mon + 1;
     c->date.day =  tm.tm_mday;      
 }
+
 //Verifies and Saves argv in global varibles
 int params(int argc, char** argv){
   int pipe, database;
@@ -329,7 +384,7 @@ int pipeInt(char *PipeName,Pipe *array ){
   for (size_t i = 0; i < MAXPIPES; i++)
   {
     if(array[i].number > -1){
-      if(strcmp(array[i].name, PipeName) == 0){
+      if(strcmp(array[i].id, PipeName) == 0){
         a = array[i].number;
       }
     }
@@ -342,12 +397,32 @@ int pipeInt(char *PipeName,Pipe *array ){
           perror("[pipeInt] ");
           break;      
         }
-        strcpy(array[i].name, PipeName);
+        strcpy(array[i].id, PipeName);
         array[i].number = a;
-        printf("Pipe Guardado Name:%s Number:%d\n",array[i].name,array[i].number);
+        nPipes++;
+        printf("[pipeInt] Pipe Guardado Name:%s Number:%d\n",array[i].id,array[i].number);
         break;
       }
     }
   }
   return a;
+}
+
+//Gets the pipe out of the equation when it sents 600 status
+// if fine returns 1 if not found 0
+int pipeOut(char *PipeName,Pipe *array ){
+  int a = 0;
+  for (size_t i = 0; i < MAXPIPES; i++)
+  {
+    if(array[i].number > -1){
+      if(strcmp(array[i].id, PipeName) == 0){
+        array[i].number = -1;
+        strcpy(array[i].id, "");
+        a = 1;
+        nPipes--;
+        printf("[pipeOut] %s\n",array[i].id); 
+      }
+    }
+  }
+  return 0;
 }

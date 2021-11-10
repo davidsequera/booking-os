@@ -15,6 +15,7 @@ query createQuery(char type,  char book[MAXNAME],  int ISBN,int status, char* pi
 //funcion de debbuging no usada
 
 int readQueries(char* path, query *qv, char* PipeName);
+int menu(query *qv,char* PipeName);
 char* genPipeName();
 int params(int argc, char** argv);
 
@@ -26,9 +27,10 @@ char *thePipe; char * queriesFile;
 int main (int argc, char **argv)
 {
 //CONTROL
-     if(params(argc,argv) == -1){//./e queries pipe 
+    int iparam = params(argc,argv);
+     if(iparam == -1){//./e queries pipe 
          printf ("Bad request: Check Documentation\n");
-         printf ("Example: ./solicitante -i queries.txt -p pipeReceptor\n");
+         printf ("Example: ./solicitante -i q1.txt -p pipeReceptor\n");
          exit(1);
      }
 
@@ -43,7 +45,7 @@ int main (int argc, char **argv)
     char *PipeName = genPipeName();
     //printf("Type: %c\tName: %s\tISBN: %d\tStatus: %d\tPipeName: %s\n",  q.type,q.book,q.ISBN,q.status,q.pipe);
     query queries[MAXQUERIES], response;
-    nqueries= readQueries(queriesFile, queries, PipeName);
+    nqueries= iparam? menu(queries, PipeName):readQueries(queriesFile, queries, PipeName);
 
 
 //SENT QUERY
@@ -54,20 +56,26 @@ int main (int argc, char **argv)
 	    sleep(5);        
     }
     printf ("Open ThePipe\n");
-    for (size_t i = 0; i < nqueries; i++){
-        write (tp, &queries[i], sizeof(query));
-        sleep(5);
-    }
 
-
-//WAIT RESPONSE
     unlink(PipeName);
     if (mkfifo (PipeName, fifo_mode) == -1) {
         perror("mkfifo");
         exit(1);
     }
+    for (size_t i = 0; i < nqueries; i++){
+        write (tp, &queries[i], sizeof(query));
+        sleep(5);
+    }
     ap = open (PipeName, O_RDONLY);
+    if (ap == -1) {
+        perror(PipeName);
+        printf(" Se volvera a intentar despues\n");
+	    sleep(5);        
+    }
     printf ("Open a Pipe\n");
+
+//WAIT RESPONSE
+
     for (size_t i = 0; i < nqueries; i++)
     {
         bytes = read (ap, &response, sizeof(query));
@@ -155,42 +163,83 @@ int readQueries(char* path, query *qv, char* PipeName){
             // printf("Type: %c\tLibro: %s\tISBN: %d\t PIPEID:%s\n",qv[qc].type,qv[qc].book,qv[qc].ISBN,qv[qc].pipe);
             qc++;      
     }
+
     // Petición adicional para terminar 
-    qv[qc].type = 'S';
-    strcpy(qv[qc].book ,PipeName);
-    qv[qc].ISBN = 0;
-    strcpy(qv[qc].pipe ,PipeName);
-    qv[qc].status = 600; // Continuar
+    qv[qc] = createQuery('S',  PipeName, 0, 600,PipeName);
     qc++;
     //
     free(line);
     return qc;
 }
-
+// Error -1, 5 0, 3 1;
 int params(int argc, char** argv){
   int pipe, queries;
-  if(argc != 5 ){
+  if(argc != 5 && argc != 3){
     return -1;
   }
-  for (size_t i = 1; i < 5; i+=2)
-  {
-    if(strlen(argv[i]) > 2 ){
-      return -1;
+  if(argc == 5){
+    for (size_t i = 1; i < 5; i+=2)
+    {
+        if(strlen(argv[i]) > 2 ){
+        return -1;
+        }
+        if(strcmp(argv[i], "-i") != 0 && strcmp(argv[i], "-p") != 0  ){
+        return -1;
+        }
+        if(strcmp(argv[i], "-i") == 0){
+        queries = i;
+        }
+        if(strcmp(argv[i], "-p") == 0){
+        pipe = i;
+        }    
     }
-    if(strcmp(argv[i], "-i") != 0 && strcmp(argv[i], "-p") != 0  ){
-      return -1;
+    queriesFile = malloc(strlen(argv[queries+1])+1); 
+    strcpy(queriesFile,argv[queries+1]);
+    thePipe = malloc(strlen(argv[pipe+1])+1); 
+    strcpy(thePipe,argv[pipe+1]);
+    return 0;
+  }else{
+    if(strcmp(argv[1], "-p") != 0){
+        return -1;
+    }else{
+        queriesFile = malloc(1); 
+        thePipe = malloc(strlen(argv[2])+1); 
+        strcpy(thePipe,argv[2]);
+        return 1;
     }
-    if(strcmp(argv[i], "-i") == 0){
-      queries = i;
-    }
-    if(strcmp(argv[i], "-p") == 0){
-      pipe = i;
-    }    
   }
-  
-  queriesFile = malloc(strlen(argv[queries+1])+1); 
-  strcpy(queriesFile,argv[queries+1]);
-  thePipe = malloc(strlen(argv[pipe+1])+1); 
-  strcpy(thePipe,argv[pipe+1]);
-  return 0;
+
+}
+
+int menu(query *qv,char* PipeName){
+    int qc = 0, more = 0;
+    int status = 100;
+    char type, temp;//temp to clean buffer
+    char book[MAXNAME];
+    int ISBN;
+    printf("Welcome, please complete this menu, in orther to create the queires \n");
+
+    do
+    {
+        printf("Please Enter Type: ");
+        scanf("%c",&type);
+        printf("Please Enter Book: ");
+        fflush( stdin );
+        scanf("%c",&temp); // temp statement to clear buffer
+        scanf ("%[^\n]", book);
+        printf("Please Enter ISBN: ");
+        scanf("%i",&ISBN);
+        printf("%c/%s/%d/%d/%s\n",type,  book, ISBN, status,PipeName);
+        qv[qc] = createQuery(type,  book, ISBN, status,PipeName);
+        qc++;
+        if(!(qc < (MAXQUERIES-1))){
+            printf("Max.Number of queries created\n");
+        }else{
+            printf("Do you wanna create more?");
+            scanf("%i",&more);
+        }
+    }while (more && qc < (MAXQUERIES-1));
+    qv[qc] = createQuery('S',  PipeName, 0, 600,PipeName);
+    qc++;
+   return qc;
 }

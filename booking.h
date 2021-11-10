@@ -1,10 +1,9 @@
 // Conexion Structures
 
-#define MAXQUERIES 100000
+#define MAXCOPIES 50
+#define MAXQUERIES 100
 #define MAXPIPES 30
-#define MAXPIPENAME 20
 #define MAXNAME 39
-#define MAXCOPIES 500
 #define MAXTHREADS 20
 
 typedef struct zeit {
@@ -23,22 +22,24 @@ typedef struct reg {
   char name[MAXNAME];
   int ISBN;
   int copies;
+  copy Copies[MAXCOPIES];
 } book;
 typedef struct net {
   char type;
   char book[MAXNAME];
   int ISBN;
   int status;
-  char pipe[MAXPIPENAME];
+  char pipe[MAXNAME];
 } query;
 typedef struct pipe{
+  char id[MAXNAME];
   int number;
-  char name[MAXPIPENAME];
+  int queries;
+  query Queries[MAXQUERIES];
 }Pipe;
 typedef struct fileEditArg{
-    int edit;
-    char path[MAXNAME];
+    int bool;
     int start;
     int end;
     char token[MAXNAME];
-} editArg;
+} edit;
