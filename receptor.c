@@ -19,10 +19,10 @@
 
 #include "booking.h" 
 
-#define BUFFSIZE 1
+#define BUFFSIZE 5
 
 //main functions
-int saveDB();
+int upDB();
 edit queryEdit(query *q, int bs);
 int readQuery(int ap, query *q);
 
@@ -35,6 +35,8 @@ void setDate(copy *c,int w);
 int params(int argc, char** argv);
 int pipeInt(char *PipeName,Pipe *array );
 int pipeOut(char *PipeName,Pipe *array );
+int fileEdit(char* path,int start,int end, char* token);
+int indexPS(char *PipeName,int ISBN,int index,unique *array);
 void *put(edit *e);
 
 //Global varibles
@@ -43,7 +45,8 @@ pthread_t hilo;
 
 char *thePipe; char * dbin;
 edit BUFFER[BUFFSIZE];
-book DB[MAXQUERIES];// Estrcutura de la base de datos
+book DB[MAXBOOKS];// Estrcutura de la base de datos
+unique uniquePS[MAXQUERIES];// verfica que sea unico
 int pcons=0, pprod=0, nbook = 0, nPipes = 0;
 
 int main (int argc, char** argv)
@@ -51,7 +54,7 @@ int main (int argc, char** argv)
 //CONTROL
   if(params(argc, argv) == -1){// ./e pipe db
     printf ("Bad request: Check out Documentation\n");
-    printf ("./receptor -p pipeReceptor -f dbin\n");
+    printf ("Example: ./receptor -p pipeReceptor -f dbin\n");
     exit(1);
   } 
   sem_init(&s, 0, 1);
@@ -62,7 +65,8 @@ int main (int argc, char** argv)
   Pipe pipes[MAXPIPES];//Buffer
   for(int i= 0; i<MAXPIPES; i++)pipes[i].number = -1;
   for(int i=0; i < BUFFSIZE; i++) BUFFER[i].bool = 0;
-  nbook = saveDB();
+  for(int i=0; i < MAXQUERIES; i++) uniquePS[i].index = -1;
+  nbook = upDB();
 
 //OPEN PIPE AND THREAD
   mode_t fifo_mode = S_IRUSR | S_IWUSR;
@@ -89,7 +93,11 @@ int main (int argc, char** argv)
     readQuery(tp,&queries[qc]); 
     status = queries[qc].status;
     Edit = queryEdit(&queries[qc], nbook);
-    if(Edit.bool != -1) put(&Edit);
+    if(Edit.bool != -1 && queries[qc].type != 'P'){
+      put(&Edit);
+    }else if(Edit.bool != -1){
+      fileEdit(dbin,Edit.start,Edit.end,Edit.token);//Para prestamo sin hilo
+    }
     ap = pipeInt(queries[qc].pipe, pipes);
     if (ap == -1) {
       printf("Error: Se volvera a intentar despues\n");
@@ -124,6 +132,33 @@ int main (int argc, char** argv)
 }
 
 //returns the number of books or -1 if error
+int upDB(){
+  // printf("Hello\n");
+  size_t size = 0;
+  int b = 0;
+  char* sample;
+  sample = (char *) malloc (size);
+  FILE *fi;
+  if((fi = fopen(dbin, "r"))== NULL){
+    return -1;
+  }
+  while (!feof(fi) )  {
+    getline(&sample,&size,fi);
+    readBook(sample,&(DB[b]));
+    for (int j = 0; j < DB[b].copies && !feof(fi) ; j++)
+    {
+      getline(&sample,&size,fi);
+      readCopy(sample,&(DB[b].Copies[j]));
+      DB[b].Copies[j].end = ftell(fi);
+      DB[b].Copies[j].start = (DB[b].Copies[j].end)-strlen(sample);
+    }
+    b++;
+  }
+  fclose(fi);
+  free(sample);
+  return b;
+}
+
 int saveDB(){
   // printf("Hello\n");
   size_t size = 0;
@@ -153,27 +188,27 @@ int saveDB(){
 
 //Search in DB if query could be made. Returs edit.bool = 1 if is found else -1
 edit queryEdit(query *q, int bs){
-  int correctBook = 0,correctCopy = 0 , founded = 0;//booleans
+  int correctBook = 0,correctCopy = 0 ,correctIndex = 0, founded = 0;//booleans
   size_t size = 0;
   char *token;
   token = (char *) malloc (size);
   copy c;
+  q->status = 404;
   edit Edit; Edit.bool = -1;
   sem_wait(&s);
   for (int i = 0; i < bs && !founded ; i++) {
     if(strcmp(DB[i].name,(q)->book) == 0   && DB[i].ISBN == (q)->ISBN){//comparar 2 strings
         correctBook = 1;
-        printf("%s\t%d\t%d\n", DB[i].name,DB[i].ISBN,DB[i].copies);
-    }else if (!correctBook){
-      q->status = 404;
+        // printf("%s\t%d\t%d\n", DB[i].name,DB[i].ISBN,DB[i].copies);
     }
     for (size_t j = 0; j < DB[i].copies && !founded ; j++)
     {
-      memcpy(&c, &(DB[i].Copies[j]), sizeof(copy));
       if(correctBook){
-        correctCopy = queryLogic(q,&c);
-        if(correctCopy){
-          founded = 1;
+        memcpy(&c, &(DB[i].Copies[j]), sizeof(copy));
+        correctIndex = indexPS(q->pipe, DB[i].ISBN, c.index,uniquePS);
+        if(correctIndex){
+          correctCopy = queryLogic(q,&c);
+          if(correctCopy)founded = 1;
         }
       }
     }    
@@ -334,10 +369,48 @@ void* EditDB(void *arg){
       fwrite(token, strlen(token), 1, f);
       fwrite(b, fend-end, 1, f);  
       fclose(f);
-      nbook = saveDB();
+      nbook = upDB();
       sem_post(&s);
       sem_post(&spaces); 
   }
+}
+
+int fileEdit(char* path,int start,int end, char* token){
+    sem_wait(&s);
+    int fend = 0;
+    FILE *f;//CONTROL
+    if((f = fopen(path, "rb")) == NULL){
+        printf("[fileEdit] Error opening file\n");
+        return -1;
+    }
+    fseek(f, 0L, SEEK_END);
+    fend = ftell(f);
+    fseek(f, 0L, SEEK_SET);
+
+    if( end > fend)
+        end = fend;
+    if(start > end || start < 0){
+        printf("[fileEdit] Incorrect params or/and overlaod\n");
+        return -1;
+    }
+    char a[start+1],b[fend-end+1];
+//COPY
+    fread(a, start, 1, f);
+    fseek(f, (long)end, SEEK_SET);
+    fread(b, fend-end, 1, f);
+    fclose(f);
+
+           
+    if((f = fopen(path, "wb")) == NULL){
+        printf("[fileEdit] Error opening file\n");
+        return -1;
+    }
+    fwrite(a, start, 1, f);
+    fwrite(token, strlen(token), 1, f);
+    fwrite(b, fend-end, 1, f);    
+    fclose(f);
+    sem_post(&s);
+    return 1;
 }
 
 //sets the actual date plus w as weeks ahead.
@@ -378,7 +451,7 @@ int params(int argc, char** argv){
   return 0;
 }
 
-//return the pipe if exist else 0
+//return the pipe if exist else -1
 int pipeInt(char *PipeName,Pipe *array ){
   int a = -1;
   for (size_t i = 0; i < MAXPIPES; i++)
@@ -425,4 +498,34 @@ int pipeOut(char *PipeName,Pipe *array ){
     }
   }
   return 0;
+}
+
+//return 1 if access 0 if not access and -1 if error
+int indexPS(char *PipeName,int ISBN,int index,unique *array ){
+  int a = -1;
+  for (size_t i = 0; i < MAXQUERIES; i++)
+  {
+    if(array[i].index > 0){
+      if( ISBN == array[i].ISBN &&  index == array[i].index){
+        if(strcmp(array[i].pipe, PipeName) == 0){
+          a = 1;
+        }else{
+          a = 0;
+        }
+        return a;
+      }
+    }
+  }
+  if(a == -1){
+    for (size_t i = 0; i < MAXQUERIES; i++){
+      if(array[i].index == -1){
+        array[i].ISBN = ISBN;
+        array[i].index = index;
+        strcpy(array[i].pipe, PipeName);
+        a = 1;
+        break;
+      }
+    }
+  }
+  return a;
 }

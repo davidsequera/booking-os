@@ -1,7 +1,8 @@
 // Conexion Structures
 
 #define MAXCOPIES 50
-#define MAXQUERIES 100
+#define MAXQUERIES 150
+#define MAXBOOKS 100
 #define MAXPIPES 30
 #define MAXNAME 39
 #define MAXTHREADS 20
@@ -43,3 +44,8 @@ typedef struct fileEditArg{
     int end;
     char token[MAXNAME];
 } edit;
+typedef struct requerimiento{
+  char pipe[MAXNAME];
+  int ISBN;
+  int index;
+} unique;
